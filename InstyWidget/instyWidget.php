@@ -4,7 +4,7 @@
 
 Plugin Name: Dans Insty Widget
 
-Plugin URI: http://ingeniir.com/
+Plugin URI: https://github.com/danke/InstyWidget
 
 Description: Instagram Slideshow Widget on your sidebar
 
