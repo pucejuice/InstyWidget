@@ -2,17 +2,17 @@
 
 /*
 
-Plugin Name: InstyWidget
+Plugin Name: Dans Insty Widget
 
-Plugin URI: https://github.com/danke/InstyWidget
+Plugin URI: http://ingeniir.com/
 
-Description: Instagram Slideshow Widget on your wordpress sidebar
+Description: Instagram Slideshow Widget on your sidebar
 
 Author: Daniel Kenna
 
 Version: 1
 
-Author URI: https://github.com/danke/InstyWidget
+Author URI: http://ingeniir.com/
 
 */
 
@@ -46,28 +46,21 @@ function instyWidget_uninstall() {
 register_deactivation_hook(__FILE__, 'instyWidget_uninstall');
 
 function instyWidget_update(){
-		global $wpdb;
-		
+	global $wpdb;
+	
 		$username = get_option('instyWidget_username');
-		
 		$imgList = getInstyImages($username);
-			
-		//select the current images in the insty_images table
-		$query = "SELECT * FROM `".$wpdb->prefix.'insty_images'."`";
-		$images = $wpdb->get_results($query, ARRAY_A);
-		$counter = 0;
 		
-		foreach ($imgList['imgs'] as $i){
-			$checker = $wpdb->get_results("SELECT COUNT(*) FROM `".$wpdb->prefix.'insty_images'."` WHERE `url`='".$i."'");
-			if($checker == 0){
+		foreach ($imgList as $i){
+			$checker = $wpdb->get_row("SELECT COUNT(`id`) AS `num` FROM `".$wpdb->prefix.'insty_images'."` WHERE `url`='".$i['img']."'",ARRAY_A);
+			if($checker['num'] == 0){
 				$query = "INSERT INTO `".$wpdb->prefix.'insty_images'."` 
 						(`id`,`url`,`link`,`date`)
-						VALUES (NULL,'".$imgList['imgs'][$counter]."', '".$imgList['links'][$counter]."', '".time()."')";
+						VALUES (NULL,'".$i['img']."', '".$i['link']."', '".time()."')";
+				$msg.= $query.' - ';
 				$wpdb->query($query);
 			}
-			$counter ++;
 		}
-		
 }
 	
 add_action('instyWidget_update', 'instyWidget_update');
@@ -81,8 +74,10 @@ function displayImages(){
 	$links = array();
 	
 	foreach ($list as $l){
-		$imgs[] = $l['url'];
-		$links[] = $l['link'];
+		if ($l['url'] !== ''){
+			$imgs[] = $l['url'];
+			$links[] = $l['link'];
+		}
 	}
 	
 	$combined['imgs'] = $imgs;
@@ -125,20 +120,36 @@ function get_web_page( $url ){
 }
 
 function getImages ($html){
+		
 		$pageArray = explode('"',$html);
 		$imgs = array();
 		$links = array();
+
 			//filter through for images and links
+
 			foreach ($pageArray as $p){
+
 				//get the user uploaded images, smaller images only(ending in _5)
+
 				if (strpos($p, '_6.jpg') !== false && strpos($p, 'profile') == false){
+
 					$imgs[] = str_replace('\/','/',$p);
+
 				} else if (strpos($p,'http:\/\/instagram.com\/p\/') !== false && strpos($p, 'profile') == false){
+
 					$links[] = str_replace('\/','/',$p);
+
 				}
+
 			}
-		$combined['imgs'] = $imgs;
-		$combined['links'] = $links;
+		$count = count($imgs);
+		$combined = array();
+		for($i=0; $i<$count; $i++){
+			$combined[] = array(
+			'img' => $imgs[$i],
+			'link'=> $links[$i]
+			);
+		}
 		return $combined;
 }
 
@@ -149,7 +160,6 @@ class InstyWidget extends WP_Widget
   //basic details for the widget, description etc
 
   function InstyWidget()
-
   {
     $widget_ops = array('classname' => 'InstyWidget', 'description' => 'Displays an Instagram Slideshow Widget on your sidebar.' );
     $this->WP_Widget('InstyWidget', 'Insty Slideshow', $widget_ops);
@@ -163,11 +173,17 @@ class InstyWidget extends WP_Widget
 
   {
 
-    $instance = wp_parse_args( (array) $instance, array( 'title' => '', 'insty_username' => '', 'thumb_size' => '250', 'timing' => '3000') );
+    $instance = wp_parse_args( (array) $instance, array( 'title' => '', 'insty_username' => '', 'thumb_size' => '250', 'padding' => '0'
+							, 'layout_across' => '1', 'layout_down' => '1', 'bg_colour' => 'FFFFFF', 'frame' => 'false', 'timing' => '3000') );
 
     $title = $instance['title'];
 	$insty_username = $instance['insty_username'];
 	$thumb_size = $instance['thumb_size'];
+	$padding = $instance['padding'];
+	$layout_across = $instance['layout_across'];
+	$layout_down = $instance['layout_down'];
+	$bg_colour = $instance['bg_colour'];
+	$frame = $instance['frame'];
 	$timing = $instance['timing'];
 	
 	$timestamp = date('d M y H:i:s',wp_next_scheduled( 'instyWidget_update' ) + 36000);
@@ -196,13 +212,23 @@ class InstyWidget extends WP_Widget
 				<input class="widefat" id="<?php echo $this->get_field_id('timing'); ?>" name="<?php echo $this->get_field_name('timing'); ?>" type="text" value="<?php echo attribute_escape($timing); ?>" /></label>
 
 		  </p>
-	  
+
+		  <p><label for="<?php echo $this->get_field_id('frame'); ?>">Frame Slideshow: 
+
+				<select class="widefat" id="<?php echo $this->get_field_id('frame'); ?>" name="<?php echo $this->get_field_name('frame'); ?>">
+
+					<option value="true" <?php echo (attribute_escape($stream)=='true' ? 'selected' : ''); ?>>Yes</option>
+
+					<option value="false" <?php echo (attribute_escape($stream)=='false' ? 'selected' : ''); ?>>No</option>
+
+				</select>
+
+		  </p>
+		  
 		  <p><label for="nextUpdate">Next Update: <?php echo $timestamp; ?></p>
 		<?php
 
   }
-
- 
 
   function update($new_instance, $old_instance)
 
@@ -212,6 +238,11 @@ class InstyWidget extends WP_Widget
     $instance['title'] = $new_instance['title'];
 	$instance['insty_username'] = $new_instance['insty_username'];
 	$instance['thumb_size'] = $new_instance['thumb_size'];
+	$instance['padding'] = $new_instance['padding'];
+	$instance['layout_across'] = $new_instance['layout_across'];
+	$instance['layout_down'] = $new_instance['layout_down'];
+	$instance['bg_colour'] = $new_instance['bg_colour'];
+	$instance['frame'] = $new_instance['frame'];
 	$instance['timing'] = $new_instance['timing'];
 	
 	update_option('instyWidget_username', $instance['insty_username']);
@@ -239,8 +270,14 @@ class InstyWidget extends WP_Widget
     $title = empty($instance['title']) ? ' ' : apply_filters('widget_title', $instance['title']);
 	$insty_username = empty($instance['insty_username']) ? '' : $instance['insty_username'];
 	$thumb_size = empty($instance['thumb_size']) ? '' : $instance['thumb_size'];
+	/*$padding = empty($instance['padding']) ? '' : $instance['padding'];
+	$layout_across = empty($instance['layout_across']) ? '1' : $instance['layout_across'];
+	$layout_down = empty($instance['layout_down']) ? '1' : $instance['layout_down'];
+	$bg_colour = empty($instance['bg_colour']) ? 'FFFFFF' : $instance['bg_colour'];
+	$frame = empty($instance['frame']) ? 'false' : $instance['frame'];*/
 	$timing = empty($instance['timing']) ? '3000' : $instance['timing'];
 
+	//$images = getInstyImages($insty_username);
 	$images = displayImages();
 	$counter = 0;
 	
